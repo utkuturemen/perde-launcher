@@ -4,7 +4,6 @@ plugins {
 }
 
 val runNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-val keystorePath: String? = System.getenv("KEYSTORE_PATH")
 
 android {
     namespace = "com.utku.perde"
@@ -15,25 +14,24 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = runNumber
-        versionName = "0.1.$runNumber"
+        versionName = "0.2.$runNumber"
     }
 
     signingConfigs {
+        // Fixed key kept in the repo on purpose, so every build can update the
+        // previous one in place (self-update depends on this).
         create("release") {
-            if (keystorePath != null) {
-                storeFile = file(keystorePath)
-                storePassword = System.getenv("KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("KEY_ALIAS")
-                keyPassword = System.getenv("KEY_PASSWORD")
-            }
+            storeFile = file("perde.jks")
+            storePassword = "perde-launcher"
+            keyAlias = "perde"
+            keyPassword = "perde-launcher"
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = if (keystorePath != null) signingConfigs.getByName("release")
-            else signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

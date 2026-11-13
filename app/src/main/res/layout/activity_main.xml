@@ -57,6 +57,12 @@
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/panel_status"
+                    style="@style/Pill"
+                    android:layout_marginEnd="10dp"
+                    android:visibility="gone" />
+
+                <TextView
                     android:id="@+id/net_status"
                     style="@style/Pill" />
 

@@ -58,6 +58,7 @@ class MainActivity : Activity() {
     private lateinit var favEmpty: TextView
     private lateinit var netStatus: TextView
     private lateinit var ramStatus: TextView
+    private lateinit var panelStatus: TextView
     private lateinit var favAdapter: AppAdapter
     private lateinit var gridAdapter: AppAdapter
 
@@ -92,6 +93,7 @@ class MainActivity : Activity() {
         favEmpty = findViewById(R.id.fav_empty)
         netStatus = findViewById(R.id.net_status)
         ramStatus = findViewById(R.id.ram_status)
+        panelStatus = findViewById(R.id.panel_status)
 
         favAdapter = AppAdapter(::launch, ::showAppMenu)
         favRow.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -120,6 +122,8 @@ class MainActivity : Activity() {
         }
 
         reloadApps()
+        WebServer.start(this)
+        checkForUpdate(silent = true)
     }
 
     override fun onResume() {
@@ -264,14 +268,18 @@ class MainActivity : Activity() {
         when {
             action.keywords != null -> pickAppFor(action)
             action.id == "settings" -> {
-                val items = arrayOf("Cihaz tanılama", "Android sistem ayarları", "Cihaz bilgisi", "Geliştirici seçenekleri")
+                val items = arrayOf(
+                    "Güncellemeleri denetle", "Cihaz tanılama", "Android sistem ayarları",
+                    "Cihaz bilgisi", "Geliştirici seçenekleri",
+                )
                 dialog().setTitle("Gelişmiş ayarlar")
                     .setItems(items) { _, i ->
                         when (i) {
-                            0 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
-                            1 -> openOr(Intent().setClassName("com.android.settings", "com.android.settings.Settings"))
-                            2 -> openOr(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS))
-                            3 -> openOr(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+                            0 -> checkForUpdate(silent = false)
+                            1 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
+                            2 -> openOr(Intent().setClassName("com.android.settings", "com.android.settings.Settings"))
+                            3 -> openOr(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS))
+                            4 -> openOr(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
                         }
                     }.show()
             }
@@ -307,6 +315,31 @@ class MainActivity : Activity() {
     /** Try each intent in order; tell the user if none of them exists on this firmware. */
     private fun openOr(vararg intents: Intent) {
         if (intents.none { start(it) }) toast("Bu cihazda açılamadı")
+    }
+
+    // ---------- Updates ----------
+
+    private fun checkForUpdate(silent: Boolean) {
+        if (!silent) toast("Güncelleme denetleniyor…")
+        executor.execute {
+            val current = Updater.installedVersion(this)
+            val latest = Updater.latestVersion()
+            handler.post {
+                when {
+                    isFinishing -> Unit
+                    latest == null -> if (!silent) toast("Sunucuya ulaşılamadı")
+                    latest <= current -> if (!silent) toast("Perde güncel (sürüm $current)")
+                    else -> dialog().setTitle("Yeni sürüm var")
+                        .setMessage("Perde sürüm $latest hazır (yüklü: $current). Şimdi güncelleyelim mi?")
+                        .setPositiveButton("Güncelle") { _, _ ->
+                            toast("İndiriliyor…")
+                            executor.execute { Updater.downloadAndInstall(this) }
+                        }
+                        .setNegativeButton("Sonra", null)
+                        .show()
+                }
+            }
+        }
     }
 
     // ---------- Memory ----------
@@ -355,6 +388,10 @@ class MainActivity : Activity() {
             caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
             else -> "Bağlı"
         }
+
+        val ip = localIpv4()
+        panelStatus.visibility = if (ip != null) View.VISIBLE else View.GONE
+        panelStatus.text = "Panel  $ip:${WebServer.PORT}"
     }
 
     // ---------- Helpers ----------

@@ -8,8 +8,6 @@ import android.view.KeyEvent
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import java.net.ServerSocket
-import kotlin.concurrent.thread
 
 /**
  * Shows which keycode each remote button sends and serves a full device report
@@ -20,8 +18,6 @@ class DiagnosticsActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var keys: TextView
     private val keyLog = ArrayDeque<String>()
-    @Volatile private var report: String = "Rapor hazırlanıyor…"
-    private var server: ServerSocket? = null
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base.withFixedDensity())
@@ -43,7 +39,7 @@ class DiagnosticsActivity : Activity() {
             setTextColor(getColor(R.color.text_primary))
         })
         status = TextView(this).apply {
-            text = "Rapor hazırlanıyor…"
+            text = ""
             textSize = 16f
             setTextColor(getColor(R.color.accent))
             setPadding(0, (12 * dp).toInt(), 0, (12 * dp).toInt())
@@ -67,23 +63,12 @@ class DiagnosticsActivity : Activity() {
             addView(column)
         })
 
-        thread(isDaemon = true) {
-            report = DeviceReport.build(applicationContext)
-            val ip = localIpv4()
-            runOnUiThread {
-                status.text = if (ip != null) {
-                    "Rapor hazır. Bilgisayarda aç:  http://$ip:8080   (sayfayı .txt olarak kaydet)"
-                } else {
-                    "Rapor hazır ama ağ bağlantısı yok. Wi‑Fi'ye bağlanıp bu ekranı tekrar aç."
-                }
-            }
+        val ip = localIpv4()
+        status.text = if (ip != null) {
+            "Rapor bilgisayardan ya da tabletten:  http://$ip:${WebServer.PORT}/report"
+        } else {
+            "Ağ bağlantısı yok. Wi‑Fi'ye bağlanıp bu ekranı tekrar aç."
         }
-        startServer()
-    }
-
-    override fun onDestroy() {
-        runCatching { server?.close() }
-        super.onDestroy()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -95,32 +80,8 @@ class DiagnosticsActivity : Activity() {
                 while (keyLog.size > 40) keyLog.removeLast()
                 keys.text = keyLog.joinToString("\n")
             }
+            WebServer.logKey(line)
         }
         return true
-    }
-
-    private fun startServer() {
-        thread(isDaemon = true) {
-            val ss = runCatching { ServerSocket(8080) }.getOrNull() ?: return@thread
-            server = ss
-            while (!ss.isClosed) {
-                val socket = runCatching { ss.accept() }.getOrNull() ?: break
-                runCatching {
-                    socket.use { s ->
-                        s.getInputStream().bufferedReader().readLine()
-                        val keyPart = synchronized(keyLog) { keyLog.reversed().joinToString("\n") }
-                        val body = (report + "\n\n==================== KUMANDA TUŞLARI ====================\n" + keyPart)
-                            .toByteArray(Charsets.UTF_8)
-                        val out = s.getOutputStream()
-                        out.write(
-                            ("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n" +
-                                "Content-Length: ${body.size}\r\nConnection: close\r\n\r\n").toByteArray()
-                        )
-                        out.write(body)
-                        out.flush()
-                    }
-                }
-            }
-        }
     }
 }
