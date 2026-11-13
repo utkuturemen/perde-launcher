@@ -54,6 +54,7 @@ jobs:
           cd out
           git init -q -b builds
           cp "Perde-${{ github.run_number }}.apk" Perde-latest.apk
+          cp "Perde-${{ github.run_number }}.apk" perde.apk
           git add .
           git -c user.name="github-actions" -c user.email="actions@github.com" commit -qm "Build ${{ github.run_number }}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" builds
