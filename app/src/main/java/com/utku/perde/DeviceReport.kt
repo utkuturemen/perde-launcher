@@ -32,6 +32,12 @@ object DeviceReport {
             appendLine("screen=${dm.widthPixels}x${dm.heightPixels} densityDpi=${dm.densityDpi}")
         }
 
+        section("DRM (Netflix / Disney+ / Prime icin)") {
+            appendLine(drmInfo())
+            appendLine("google_play_services=${installed(ctx, "com.google.android.gms")}")
+            appendLine("google_play_store=${installed(ctx, "com.android.vending")}")
+        }
+
         section("CPUINFO") {
             appendLine(runCatching { File("/proc/cpuinfo").readText() }.getOrElse { "okunamadı: $it" })
         }
@@ -75,6 +81,23 @@ object DeviceReport {
             }
         }
     }
+
+    private fun installed(ctx: Context, pkg: String): Boolean =
+        runCatching { ctx.packageManager.getPackageInfo(pkg, 0); true }.getOrDefault(false)
+
+    /** Widevine level decides whether streaming apps play at all, and in which quality. */
+    private fun drmInfo(): String = runCatching {
+        val widevine = java.util.UUID(-0x121074568629b532L, -0x5c37d8232ae2de13L)
+        val drm = android.media.MediaDrm(widevine)
+        try {
+            listOf("securityLevel", "systemId", "hdcpLevel", "maxHdcpLevel", "version", "vendor")
+                .joinToString("\n") { key ->
+                    "widevine.$key=" + runCatching { drm.getPropertyString(key) }.getOrDefault("?")
+                }
+        } finally {
+            drm.close()
+        }
+    }.getOrElse { "widevine yok ya da okunamadı: $it" }
 
     private fun StringBuilder.section(title: String, body: StringBuilder.() -> Unit) {
         appendLine()
